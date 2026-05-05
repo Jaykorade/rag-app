@@ -72,7 +72,7 @@ if uploaded_file:
     db = create_vectorstore(file_path, uploaded_file.type)
     retriever = db.as_retriever(search_kwargs={"k": 3})
 
-    llm = ChatOpenAI(temperature=0)
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     prompt = ChatPromptTemplate.from_template(
         """Answer ONLY from the context below.
