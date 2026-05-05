@@ -13,15 +13,21 @@ from langchain_core.output_parsers import StrOutputParser
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Advanced RAG", layout="wide")
-st.title("📚 Production RAG Assistant")
+st.title("📚 Production RAG Assistant (With Memory)")
 
 # ---------------- LOAD SECRETS ----------------
-OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", None)
-APP_PASSWORD = st.secrets.get("APP_PASSWORD", "admin")
 
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+APP_PASSWORD = os.getenv("APP_PASSWORD")
+
+# fallback for Streamlit Cloud
 if not OPENAI_API_KEY:
-    load_dotenv()
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", None)
+
+if not APP_PASSWORD:
+    APP_PASSWORD = st.secrets.get("APP_PASSWORD", "admin")
 
 # ---------------- LOGIN ----------------
 def login():
@@ -86,7 +92,6 @@ def build_vectorstore(docs):
     chunks = splitter.split_documents(docs)
 
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
     db = FAISS.from_documents(chunks, embeddings)
 
     return db
@@ -111,6 +116,14 @@ def format_docs(docs):
         for d in docs
     )
 
+# ---------------- CHAT HISTORY ----------------
+def format_chat_history(messages):
+    history = ""
+    for msg in messages:
+        role = "User" if msg["role"] == "user" else "Assistant"
+        history += f"{role}: {msg['content']}\n"
+    return history
+
 # ---------------- LLM ----------------
 llm = ChatOpenAI(
     model="gpt-4o-mini",
@@ -124,9 +137,12 @@ You are a strict document assistant.
 
 RULES:
 - Use ONLY the provided context
+- Use chat history to understand follow-up questions
 - If answer is not found, say "Not found in document"
-- Do NOT guess or add outside knowledge
-- Be concise and factual
+- Do NOT guess
+
+Chat History:
+{history}
 
 Context:
 {context}
@@ -147,8 +163,10 @@ for msg in st.session_state.messages:
 
 user_query = st.chat_input("Ask something from your documents")
 
+# ---------------- QUERY FLOW ----------------
 if user_query and st.session_state.db:
 
+    # Store user message
     st.session_state.messages.append({"role": "user", "content": user_query})
 
     with st.chat_message("user"):
@@ -156,14 +174,17 @@ if user_query and st.session_state.db:
 
     retriever = get_retriever(st.session_state.db)
 
-    # ✅ FIXED: modern LangChain API
+    # Retrieve docs
     docs = retriever.invoke(user_query)
-
     context = format_docs(docs)
+
+    # ✅ MEMORY ADDED HERE
+    history = format_chat_history(st.session_state.messages[:-1])
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             response = chain.invoke({
+                "history": history,
                 "context": context,
                 "question": user_query
             })
@@ -176,6 +197,7 @@ if user_query and st.session_state.db:
                 st.markdown(f"**Chunk {i+1} | Page {d.metadata.get('page', 'N/A')}**")
                 st.write(d.page_content)
 
+    # Store assistant response
     st.session_state.messages.append(
         {"role": "assistant", "content": response}
     )
