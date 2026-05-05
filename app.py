@@ -13,7 +13,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Advanced RAG", layout="wide")
-st.title("📚 Production RAG Assistant (With Memory)")
+st.title("📚 PDF Assistant (With Memory)")
 
 # ---------------- LOAD SECRETS ----------------
 
